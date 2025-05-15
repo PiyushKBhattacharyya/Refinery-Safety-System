@@ -5,3 +5,4 @@ torch>=2.0.0
 torchvision>=0.15.0
 python-dotenv>=1.0.0
 supervision>=0.3.0 
+roboflow>=1.0.0

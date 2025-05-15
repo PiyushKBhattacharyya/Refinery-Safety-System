@@ -1,3 +1,10 @@
+# INSTRUCTIONS:
+# Download the PPE YOLOv8 model weights from Roboflow or similar source:
+# wget https://github.com/roboflow-ai/models/releases/download/yolov8n-ppe-helmet/yolov8n-ppe-helmet.pt -O yolov8n-ppe-helmet.pt
+# Place yolov8n-ppe-helmet.pt in your project directory.
+#
+# This model detects: 0=person, 1=helmet, 2=vest, 3=boots
+
 import cv2
 import numpy as np
 from ultralytics import YOLO
@@ -5,23 +12,27 @@ import supervision as sv
 from datetime import datetime
 import os
 from pathlib import Path
+import requests  # <-- Add this import
+from roboflow import Roboflow  # <-- Add this import
 
 class SafetyMonitor:
     def __init__(self):
-        # Initialize YOLO model
-        self.model = YOLO('yolov8n.pt')
+        # Initialize Roboflow model
+        rf = Roboflow(api_key="35phBzEeTnRLGk2aHLqx")
+        project = rf.workspace().project("ppe-detection-public-kqerh")
+        self.model = project.version("2").model
         
-        # Define PPE classes we want to detect
+        # Define PPE classes as per the model
         self.ppe_classes = {
-            'helmet': 0,
-            'boots': 1,
-            'vest': 2,  # Added safety vest
-            'person': 3
+            'person': 0,
+            'helmet': 1,
+            'vest': 2,
+            'boots': 3
         }
         
         # Initialize violation tracking
         self.violation_history = {}
-        self.violation_cooldown = 30  # seconds
+        self.violation_cooldown = 50  # seconds
         self.last_violation_time = {}
         
         # Create violations directory if it doesn't exist
@@ -50,28 +61,46 @@ class SafetyMonitor:
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
         
     def process_frame(self, frame):
-        # Run YOLO detection
-        results = self.model(frame, classes=[0, 1, 2, 3])[0]
-        
-        # Convert results to supervision format
+        # Run Roboflow model prediction
+        # Convert frame to RGB and save as temp file for Roboflow SDK
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        temp_path = "temp_frame.jpg"
+        cv2.imwrite(temp_path, rgb_frame)
+        results = self.model.predict(temp_path, confidence=40, overlap=30).json()
+        os.remove(temp_path)
+
+        # Parse results to match previous format
+        preds = results['predictions']
+        if len(preds) == 0:
+            xyxy = np.zeros((0, 4))
+            confidence = np.zeros((0,))
+            class_id = np.zeros((0,), dtype=int)
+        else:
+            xyxy = np.array([
+                [pred['x'] - pred['width'] / 2, pred['y'] - pred['height'] / 2,
+                 pred['x'] + pred['width'] / 2, pred['y'] + pred['height'] / 2]
+                for pred in preds
+            ])
+            confidence = np.array([pred['confidence'] for pred in preds])
+            class_id = np.array([
+                pred['class_id'] if 'class_id' in pred else self.ppe_classes.get(pred['class'], -1)
+                for pred in preds
+            ])
+
         detections = sv.Detections(
-            xyxy=results.boxes.xyxy.cpu().numpy(),
-            confidence=results.boxes.conf.cpu().numpy(),
-            class_id=results.boxes.cls.cpu().numpy().astype(int)
+            xyxy=xyxy,
+            confidence=confidence,
+            class_id=class_id
         )
+        
+        # Print detected class IDs for debugging
+        print("Detected class IDs:", detections.class_id)
         
         # Track objects
         detections = self.tracker.update_with_detections(detections)
         
         # Check for violations
         violations = self.check_violations(detections)
-        
-        # Create labels for annotations
-        labels = [
-            f"{self.model.names[class_id]} {confidence:0.2f}"
-            for class_id, confidence
-            in zip(detections.class_id, detections.confidence)
-        ]
         
         # Draw bounding boxes
         annotated_frame = frame.copy()
@@ -140,17 +169,9 @@ class SafetyMonitor:
         # Check violations for each tracked person
         for person_id, detected_classes in tracked_objects.items():
             # Check if person has all required PPE
-            has_helmet = False
-            has_boots = False
-            has_vest = False
-            
-            for class_id in detected_classes:
-                if class_id == self.ppe_classes['helmet']:
-                    has_helmet = True
-                elif class_id == self.ppe_classes['boots']:
-                    has_boots = True
-                elif class_id == self.ppe_classes['vest']:
-                    has_vest = True
+            has_helmet = any(class_id == self.ppe_classes['helmet'] for class_id in detected_classes)
+            has_boots = any(class_id == self.ppe_classes['boots'] for class_id in detected_classes)
+            has_vest = any(class_id == self.ppe_classes['vest'] for class_id in detected_classes)
             
             # Check for violations
             missing_ppe = []
@@ -188,8 +209,8 @@ def main():
     # Initialize safety monitor
     monitor = SafetyMonitor()
     
-    # Initialize video capture (0 for webcam, or provide video file path)
-    cap = cv2.VideoCapture(0)
+    # Initialize video capture with the specified video file
+    cap = cv2.VideoCapture('clips/clip2.mp4')
     
     while True:
         ret, frame = cap.read()
@@ -204,8 +225,23 @@ def main():
             monitor.save_violation(frame, violation)
             print(f"Violation detected: {violation['type']} for person {violation['person_id']}")
         
-        # Display frame
-        cv2.imshow('Safety Monitoring', processed_frame)
+        # Create side by side preview
+        # Resize frames to have the same height
+        height = 480  # Set a fixed height
+        width = int(frame.shape[1] * (height / frame.shape[0]))
+        dim = (width, height)
+        
+        original_resized = cv2.resize(frame, dim)
+        processed_resized = cv2.resize(processed_frame, dim)
+        
+        # Combine frames horizontally
+        preview = np.hstack((original_resized, processed_resized))
+        
+        # Add labels above each frame
+        cv2.putText(preview, "Original", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(preview, "Safety Monitor", (width + 10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        
+        cv2.imwrite('preview.jpg', preview)
         
         # Break loop on 'q' press
         if cv2.waitKey(1) & 0xFF == ord('q'):
