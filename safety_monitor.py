@@ -12,8 +12,8 @@ import supervision as sv
 from datetime import datetime
 import os
 from pathlib import Path
-import requests  # <-- Add this import
-from roboflow import Roboflow  # <-- Add this import
+import requests
+from roboflow import Roboflow 
 
 class SafetyMonitor:
     def __init__(self):
