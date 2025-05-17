@@ -35,6 +35,7 @@ model = YOLO(MODEL_PATH)
 CLASS_NAMES = model.names  # dict: {0: 'class1', 1: 'class2', ...}
 COOLDOWN_SECONDS = 5
 FRAME_SKIP = 2
+HEIGHT_THRESHOLD = 0.6  # 60% of image height; adjust as needed
 
 DB_PATH = 'violations.db'
 
@@ -104,7 +105,7 @@ async def upload_video(file: UploadFile = File(...)):
                         "class": class_name,
                         "bbox": [int(xyxy[0]), int(xyxy[1]), int(xyxy[2]), int(xyxy[3])]
                     })
-                    # Cooldown logic
+                    # Cooldown logic for regular violations
                     last_time = last_violation_time.get(class_name, -COOLDOWN_SECONDS)
                     if timestamp_sec - last_time >= COOLDOWN_SECONDS:
                         violation = {
@@ -114,9 +115,25 @@ async def upload_video(file: UploadFile = File(...)):
                         violations.append(violation)
                         last_violation_time[class_name] = timestamp_sec
                         stats[class_name] = stats.get(class_name, 0) + 1
-                        # Store violation in DB
                         c.execute("INSERT INTO violations (video_id, type, timestamp) VALUES (?, ?, ?)",
                                   (video_id, class_name, str(timedelta(seconds=int(timestamp_sec)))))
+                    # At height detection for person
+                    if class_name.lower() == 'person':
+                        y2 = int(xyxy[3])
+                        img_h = frame.shape[0]
+                        if y2 < int(HEIGHT_THRESHOLD * img_h):
+                            # Cooldown for at height
+                            last_time = last_violation_time.get('at_height', -COOLDOWN_SECONDS)
+                            if timestamp_sec - last_time >= COOLDOWN_SECONDS:
+                                violation = {
+                                    "type": "Person at height",
+                                    "timestamp": str(timedelta(seconds=int(timestamp_sec)))
+                                }
+                                violations.append(violation)
+                                last_violation_time['at_height'] = timestamp_sec
+                                stats['Person at height'] = stats.get('Person at height', 0) + 1
+                                c.execute("INSERT INTO violations (video_id, type, timestamp) VALUES (?, ?, ?)",
+                                          (video_id, "Person at height", str(timedelta(seconds=int(timestamp_sec)))))
             last_frame_boxes = frame_boxes
         else:
             # For skipped frames, use last detections for overlay (no new violation check)
