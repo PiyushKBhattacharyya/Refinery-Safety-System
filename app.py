@@ -27,3 +27,30 @@ def violations_api():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+from flask import Flask, jsonify, send_from_directory
+import csv
+
+app = Flask(__name__)
+
+@app.route('/')
+def serve_dashboard():
+    return send_from_directory('.', 'dashboard.html')  # serve the HTML file
+
+@app.route('/violations')
+def get_violations():
+    violations = []
+    with open('violations.csv', newline='') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            violations.append({
+                'timestamp': row['timestamp'],
+                'area': row['area'],
+                'ppe_missing': row['ppe_missing'],
+                'height_level': float(row['height_level']),
+                'image_path': row['image_path']
+            })
+    return jsonify(violations)
+
+if __name__ == '__main__':
+    app.run(debug=True)

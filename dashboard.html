@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>PPE Violation Dashboard</title>
   <style>
     body {
@@ -24,18 +24,12 @@
       max-width: 1200px;
       margin: 0 auto;
     }
-    .grid {
-      display: grid;
-      gap: 1rem;
-    }
-    .grid-3 {
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    }
     .card {
       background-color: white;
       padding: 1rem;
       border-radius: 8px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+      margin-bottom: 1rem;
     }
     table {
       width: 100%;
@@ -83,13 +77,13 @@
             <td>${v.area}</td>
             <td>${v.ppe_missing}</td>
             <td>${v.height_level} m</td>
-            <td><img src="${v.image_path}" alt="violation"></td>
+            <td><img src="${v.image_path}" alt="violation" /></td>
           </tr>`;
 
         // Count area
         areaCounts[v.area] = (areaCounts[v.area] || 0) + 1;
 
-        // Count time
+        // Count time bucket
         const hour = v.timestamp.split(' ')[1].split(':')[0];
         const label = `${hour}:00 - ${parseInt(hour) + 1}:00`;
         timeCounts[label] = (timeCounts[label] || 0) + 1;
@@ -99,26 +93,59 @@
         if (v.height_level > 3) heightAbove3++;
       });
 
-      // Charts
-      renderBarChart('violationChartArea', 'Violations by Area', Object.keys(areaCounts), Object.values(areaCounts), ['#60a5fa', '#f87171']);
-      renderBarChart('violationChartTime', 'Violations by Time', Object.keys(timeCounts), Object.values(timeCounts), ['#34d399', '#facc15']);
-      renderBarChart('violationChartHeight', 'Violations by Height', ['> 2m', '> 3m'], [heightAbove2, heightAbove3], ['#a78bfa', '#f472b6']);
+      renderBarChart(
+        'violationChartArea',
+        'Violations by Area',
+        Object.keys(areaCounts),
+        Object.values(areaCounts),
+        generateColors(Object.keys(areaCounts).length)
+      );
+
+      renderBarChart(
+        'violationChartTime',
+        'Violations by Time',
+        Object.keys(timeCounts),
+        Object.values(timeCounts),
+        generateColors(Object.keys(timeCounts).length)
+      );
+
+      renderBarChart(
+        'violationChartHeight',
+        'Violations by Height',
+        ['> 2m', '> 3m'],
+        [heightAbove2, heightAbove3],
+        ['#a78bfa', '#f472b6']
+      );
     }
 
     function renderBarChart(id, label, labels, data, colors) {
-      new Chart(document.getElementById(id).getContext('2d'), {
+      const ctx = document.getElementById(id).getContext('2d');
+      if (window[id]) window[id].destroy(); // Destroy existing chart if reloaded
+      window[id] = new Chart(ctx, {
         type: 'bar',
         data: {
           labels: labels,
-          datasets: [{ label: label, data: data, backgroundColor: colors }]
+          datasets: [{
+            label: label,
+            data: data,
+            backgroundColor: colors
+          }]
         },
-        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+        options: {
+          responsive: true,
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
       });
     }
 
-    window.onload = () => {
-      fetchViolations();
-    };
+    function generateColors(n) {
+      const palette = ['#60a5fa', '#f87171', '#34d399', '#facc15', '#a78bfa', '#f472b6', '#fcd34d', '#4ade80'];
+      return Array.from({ length: n }, (_, i) => palette[i % palette.length]);
+    }
+
+    window.onload = fetchViolations;
   </script>
 </head>
 <body>
@@ -140,26 +167,25 @@
           </tr>
         </thead>
         <tbody id="violationTableBody">
-          <!-- JavaScript will populate this -->
+          <!-- Table data goes here -->
         </tbody>
       </table>
     </div>
 
     <div class="card">
-      <h2>Violations by Area </h2>
+      <h2>Violations by Area</h2>
       <canvas id="violationChartArea"></canvas>
     </div>
 
     <div class="card">
-      <h2>Violations by Time </h2>
+      <h2>Violations by Time</h2>
       <canvas id="violationChartTime"></canvas>
     </div>
 
     <div class="card">
-      <h2>Violations by Height </h2>
+      <h2>Violations by Height</h2>
       <canvas id="violationChartHeight"></canvas>
     </div>
   </main>
 </body>
 </html>
-s

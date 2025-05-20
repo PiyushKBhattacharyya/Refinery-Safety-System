@@ -46,6 +46,9 @@ def init_db():
         video_id TEXT,
         type TEXT,
         timestamp TEXT
+        height_level REAL,
+        area TEXT,
+        image_path TEXT
     )''')
     conn.commit()
     conn.close()
