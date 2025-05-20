@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PPE Violation Dashboard</title>
+  <style>
+    body {
+      background-color: #f3f4f6;
+      color: #1f2937;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background-color: #2563eb;
+      color: white;
+      padding: 1rem;
+      text-align: center;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    main {
+      padding: 1rem;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .grid {
+      display: grid;
+      gap: 1rem;
+    }
+    .grid-3 {
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    }
+    .card {
+      background-color: white;
+      padding: 1rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 0.5rem;
+      text-align: center;
+    }
+    th {
+      background-color: #e5e7eb;
+    }
+    img {
+      max-height: 64px;
+      border-radius: 4px;
+    }
+    canvas {
+      width: 100% !important;
+      max-width: 600px;
+      margin: 1rem auto;
+      display: block;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    async function fetchViolations() {
+      const res = await fetch('/violations');
+      const violations = await res.json();
+
+      const tableBody = document.getElementById('violationTableBody');
+      tableBody.innerHTML = '';
+
+      const areaCounts = {};
+      const timeCounts = {};
+      let heightAbove2 = 0;
+      let heightAbove3 = 0;
+
+      violations.forEach(v => {
+        // Populate table
+        tableBody.innerHTML += `
+          <tr>
+            <td>${v.timestamp}</td>
+            <td>${v.area}</td>
+            <td>${v.ppe_missing}</td>
+            <td>${v.height_level} m</td>
+            <td><img src="${v.image_path}" alt="violation"></td>
+          </tr>`;
+
+        // Count area
+        areaCounts[v.area] = (areaCounts[v.area] || 0) + 1;
+
+        // Count time
+        const hour = v.timestamp.split(' ')[1].split(':')[0];
+        const label = `${hour}:00 - ${parseInt(hour) + 1}:00`;
+        timeCounts[label] = (timeCounts[label] || 0) + 1;
+
+        // Count height
+        if (v.height_level > 2) heightAbove2++;
+        if (v.height_level > 3) heightAbove3++;
+      });
+
+      // Charts
+      renderBarChart('violationChartArea', 'Violations by Area', Object.keys(areaCounts), Object.values(areaCounts), ['#60a5fa', '#f87171']);
+      renderBarChart('violationChartTime', 'Violations by Time', Object.keys(timeCounts), Object.values(timeCounts), ['#34d399', '#facc15']);
+      renderBarChart('violationChartHeight', 'Violations by Height', ['> 2m', '> 3m'], [heightAbove2, heightAbove3], ['#a78bfa', '#f472b6']);
+    }
+
+    function renderBarChart(id, label, labels, data, colors) {
+      new Chart(document.getElementById(id).getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{ label: label, data: data, backgroundColor: colors }]
+        },
+        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+      });
+    }
+
+    window.onload = () => {
+      fetchViolations();
+    };
+  </script>
+</head>
+<body>
+  <header>
+    <h1>PPE Violation Detection Dashboard</h1>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2>All Violations</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Area</th>
+            <th>PPE Missing</th>
+            <th>Height</th>
+            <th>Image</th>
+          </tr>
+        </thead>
+        <tbody id="violationTableBody">
+          <!-- JavaScript will populate this -->
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Violations by Area </h2>
+      <canvas id="violationChartArea"></canvas>
+    </div>
+
+    <div class="card">
+      <h2>Violations by Time </h2>
+      <canvas id="violationChartTime"></canvas>
+    </div>
+
+    <div class="card">
+      <h2>Violations by Height </h2>
+      <canvas id="violationChartHeight"></canvas>
+    </div>
+  </main>
+</body>
+</html>
+s
